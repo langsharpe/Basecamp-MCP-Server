@@ -1823,19 +1823,21 @@ async def create_attachment(file_path: str, name: str, content_type: Optional[st
         }
 
 @mcp.tool()
-async def get_events(project_id: str, recording_id: str) -> Dict[str, Any]:
+async def get_events(project_id: str, recording_id: str, page: int = 1) -> Dict[str, Any]:
     """Get events for a recording.
-    
+
     Args:
         project_id: Project ID
         recording_id: Recording ID
+        page: Page number for pagination (default: 1). Basecamp uses geared pagination:
+              page 1 has 15 results, page 2 has 30, page 3 has 50, page 4+ has 100.
     """
     client = _get_basecamp_client()
     if not client:
         return _get_auth_error_response()
-    
+
     try:
-        events = await _run_sync(client.get_events, project_id, recording_id)
+        events = await _run_sync(client.get_events, project_id, recording_id, page)
         return {
             "status": "success",
             "events": events,
@@ -1843,6 +1845,47 @@ async def get_events(project_id: str, recording_id: str) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Error getting events: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+@mcp.tool()
+async def get_recordings(type: str, bucket: Optional[str] = None, status: str = "active", sort: str = "created_at", direction: str = "desc", page: int = 1) -> Dict[str, Any]:
+    """Get recordings of a specific type across projects (global activity feed).
+
+    Use this to browse recent activity across all projects or within specific ones.
+    Returns recordings filtered by type, sorted by creation or update time.
+
+    Args:
+        type: Recording type. Must be one of: Comment, Document, Kanban::Card,
+              Kanban::Step, Message, Question::Answer, Schedule::Entry, Todo,
+              Todolist, Upload, Vault
+        bucket: Optional comma-separated project IDs to filter by (e.g. "123" or "123,456").
+                Defaults to all active projects visible to the user.
+        status: Filter by status: active, archived, or trashed (default: active)
+        sort: Sort field: created_at or updated_at (default: created_at)
+        direction: Sort direction: desc or asc (default: desc)
+        page: Page number for pagination (default: 1)
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        recordings = await _run_sync(client.get_recordings, type, bucket, status, sort, direction, page)
+        return {
+            "status": "success",
+            "recordings": recordings,
+            "count": len(recordings)
+        }
+    except Exception as e:
+        logger.error(f"Error getting recordings: {e}")
         if "401" in str(e) and "expired" in str(e).lower():
             return {
                 "error": "OAuth token expired",
@@ -2162,7 +2205,226 @@ async def get_upload(project_id: str, upload_id: str) -> Dict[str, Any]:
             "message": str(e)
         }
 
-# 🎉 COMPLETE FastMCP server with ALL tools migrated!
+# Timeline Tools
+@mcp.tool()
+async def get_timeline(page: int = 1) -> Dict[str, Any]:
+    """Get timeline events across all projects (global activity feed).
+
+    Shows recent activity like messages posted, to-dos completed, files uploaded, etc.
+
+    Args:
+        page: Page number for pagination (default: 1)
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        events = await _run_sync(client.get_timeline, page)
+        return {
+            "status": "success",
+            "events": events,
+            "count": len(events),
+            "page": page
+        }
+    except Exception as e:
+        logger.error(f"Error getting timeline: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+@mcp.tool()
+async def get_project_timeline(project_id: str, page: int = 1) -> Dict[str, Any]:
+    """Get timeline events for a specific project.
+
+    Args:
+        project_id: The project ID
+        page: Page number for pagination (default: 1)
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        events = await _run_sync(client.get_project_timeline, project_id, page)
+        return {
+            "status": "success",
+            "events": events,
+            "count": len(events),
+            "page": page
+        }
+    except Exception as e:
+        logger.error(f"Error getting project timeline: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+@mcp.tool()
+async def get_person_timeline(person_id: str, page: int = 1) -> Dict[str, Any]:
+    """Get timeline events created by a specific person.
+
+    Args:
+        person_id: The person ID
+        page: Page number for pagination (default: 1)
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        result = await _run_sync(client.get_person_timeline, person_id, page)
+        return {
+            "status": "success",
+            "person": result.get("person"),
+            "events": result.get("events", []),
+            "count": len(result.get("events", [])),
+            "page": page
+        }
+    except Exception as e:
+        logger.error(f"Error getting person timeline: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+# Report Tools
+@mcp.tool()
+async def get_todo_assignees() -> Dict[str, Any]:
+    """Get list of all people who can have to-dos assigned to them."""
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        people = await _run_sync(client.get_todo_assignees)
+        return {
+            "status": "success",
+            "people": people,
+            "count": len(people)
+        }
+    except Exception as e:
+        logger.error(f"Error getting todo assignees: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+@mcp.tool()
+async def get_person_todos(person_id: str, group_by: str = "bucket") -> Dict[str, Any]:
+    """Get all active, pending to-dos assigned to a person.
+
+    Args:
+        person_id: The person ID
+        group_by: Group by 'bucket' (project) or 'date' (due date). Default: 'bucket'.
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        result = await _run_sync(client.get_person_todos, person_id, group_by)
+        return {
+            "status": "success",
+            "person": result.get("person"),
+            "grouped_by": result.get("grouped_by"),
+            "todos": result.get("todos", []),
+            "count": len(result.get("todos", []))
+        }
+    except Exception as e:
+        logger.error(f"Error getting person todos: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+@mcp.tool()
+async def get_overdue_todos() -> Dict[str, Any]:
+    """Get all overdue to-dos across all projects, grouped by how late they are.
+
+    Returns groups: under_a_week_late, over_a_week_late, over_a_month_late, over_three_months_late.
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        result = await _run_sync(client.get_overdue_todos)
+        return {
+            "status": "success",
+            "overdue_todos": result
+        }
+    except Exception as e:
+        logger.error(f"Error getting overdue todos: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+@mcp.tool()
+async def get_upcoming_schedule(window_starts_on: str, window_ends_on: str) -> Dict[str, Any]:
+    """Get schedule entries and assignable items within a date window.
+
+    Args:
+        window_starts_on: Start date in YYYY-MM-DD format
+        window_ends_on: End date in YYYY-MM-DD format
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        result = await _run_sync(
+            lambda: client.get_upcoming_schedule(window_starts_on, window_ends_on)
+        )
+        return {
+            "status": "success",
+            "schedule_entries": result.get("schedule_entries", []),
+            "recurring_schedule_entry_occurrences": result.get("recurring_schedule_entry_occurrences", []),
+            "assignables": result.get("assignables", [])
+        }
+    except Exception as e:
+        logger.error(f"Error getting upcoming schedule: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
 
 if __name__ == "__main__":
     logger.info("Starting Basecamp FastMCP server")

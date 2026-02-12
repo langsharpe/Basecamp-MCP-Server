@@ -1039,14 +1039,64 @@ class BasecampClient:
         else:
             raise Exception(f"Failed to create attachment: {response.status_code} - {response.text}")
 
-    def get_events(self, project_id, recording_id):
-        """Get events for a recording."""
+    def get_events(self, project_id, recording_id, page=1):
+        """Get events for a recording.
+
+        Args:
+            project_id (str): Project/bucket ID
+            recording_id (str): Recording ID
+            page (int, optional): Page number for pagination (default: 1).
+                Basecamp uses geared pagination: page 1 has 15 results,
+                page 2 has 30, page 3 has 50, page 4+ has 100.
+
+        Returns:
+            list: List of event objects
+        """
         endpoint = f"buckets/{project_id}/recordings/{recording_id}/events.json"
-        response = self.get(endpoint)
+        response = self.get(endpoint, params={"page": page})
         if response.status_code == 200:
             return response.json()
         else:
             raise Exception(f"Failed to get events: {response.status_code} - {response.text}")
+
+    def get_recordings(self, type, bucket=None, status="active", sort="created_at", direction="desc", page=1):
+        """Get recordings of a specific type across projects (global activity feed).
+
+        This serves as a global activity feed, returning recordings filtered by type
+        across all projects or specific ones.
+
+        Args:
+            type (str): Recording type. Must be one of: Comment, Document,
+                Kanban::Card, Kanban::Step, Message, Question::Answer,
+                Schedule::Entry, Todo, Todolist, Upload, Vault
+            bucket (str, optional): Comma-separated project IDs to filter by.
+                Defaults to all active projects visible to the user.
+            status (str, optional): Filter by status: active, archived, or trashed.
+                Defaults to 'active'.
+            sort (str, optional): Sort field: created_at or updated_at.
+                Defaults to 'created_at'.
+            direction (str, optional): Sort direction: desc or asc.
+                Defaults to 'desc'.
+            page (int, optional): Page number for pagination (default: 1).
+
+        Returns:
+            list: List of recording objects
+        """
+        endpoint = "projects/recordings.json"
+        params = {
+            "type": type,
+            "status": status,
+            "sort": sort,
+            "direction": direction,
+            "page": page,
+        }
+        if bucket:
+            params["bucket"] = bucket
+        response = self.get(endpoint, params=params)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to get recordings: {response.status_code} - {response.text}")
 
     def get_webhooks(self, project_id):
         """List webhooks for a project."""
@@ -1150,3 +1200,121 @@ class BasecampClient:
             return response.json()
         else:
             raise Exception(f"Failed to get upload: {response.status_code} - {response.text}")
+
+    # Timeline methods
+    def get_timeline(self, page=1):
+        """Get timeline events across all projects (global activity feed).
+
+        Args:
+            page (int, optional): Page number for pagination (default: 1).
+
+        Returns:
+            list: List of timeline event objects
+        """
+        endpoint = "reports/progress.json"
+        response = self.get(endpoint, params={"page": page})
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to get timeline: {response.status_code} - {response.text}")
+
+    def get_project_timeline(self, project_id, page=1):
+        """Get timeline events for a specific project.
+
+        Args:
+            project_id (str): Project ID
+            page (int, optional): Page number for pagination (default: 1).
+
+        Returns:
+            list: List of timeline event objects
+        """
+        endpoint = f"projects/{project_id}/timeline.json"
+        response = self.get(endpoint, params={"page": page})
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to get project timeline: {response.status_code} - {response.text}")
+
+    def get_person_timeline(self, person_id, page=1):
+        """Get timeline events created by a specific person.
+
+        Args:
+            person_id (str): Person ID
+            page (int, optional): Page number for pagination (default: 1).
+
+        Returns:
+            dict: Contains 'person' object and 'events' list
+        """
+        endpoint = f"reports/users/progress/{person_id}.json"
+        response = self.get(endpoint, params={"page": page})
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to get person timeline: {response.status_code} - {response.text}")
+
+    # Report methods
+    def get_todo_assignees(self):
+        """Get list of all people who can have to-dos assigned to them.
+
+        Returns:
+            list: List of person objects
+        """
+        endpoint = "reports/todos/assigned.json"
+        response = self.get(endpoint)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to get todo assignees: {response.status_code} - {response.text}")
+
+    def get_person_todos(self, person_id, group_by="bucket"):
+        """Get all active, pending to-dos assigned to a person.
+
+        Args:
+            person_id (str): Person ID
+            group_by (str, optional): Group by 'bucket' (project) or 'date' (due date).
+                Defaults to 'bucket'.
+
+        Returns:
+            dict: Contains 'person', 'grouped_by', and 'todos' fields
+        """
+        endpoint = f"reports/todos/assigned/{person_id}.json"
+        response = self.get(endpoint, params={"group_by": group_by})
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to get person todos: {response.status_code} - {response.text}")
+
+    def get_overdue_todos(self):
+        """Get all overdue to-dos across all projects, grouped by lateness.
+
+        Returns:
+            dict: Contains 'under_a_week_late', 'over_a_week_late',
+                  'over_a_month_late', 'over_three_months_late' lists
+        """
+        endpoint = "reports/todos/overdue.json"
+        response = self.get(endpoint)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to get overdue todos: {response.status_code} - {response.text}")
+
+    def get_upcoming_schedule(self, window_starts_on, window_ends_on):
+        """Get schedule entries and assignable items within a date window.
+
+        Args:
+            window_starts_on (str): Start date in YYYY-MM-DD format
+            window_ends_on (str): End date in YYYY-MM-DD format
+
+        Returns:
+            dict: Contains 'schedule_entries', 'recurring_schedule_entry_occurrences',
+                  and 'assignables' lists
+        """
+        endpoint = "reports/schedules/upcoming.json"
+        response = self.get(endpoint, params={
+            "window_starts_on": window_starts_on,
+            "window_ends_on": window_ends_on
+        })
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to get upcoming schedule: {response.status_code} - {response.text}")

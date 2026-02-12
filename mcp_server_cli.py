@@ -600,9 +600,26 @@ class MCPServer:
                     "type": "object",
                     "properties": {
                         "project_id": {"type": "string", "description": "Project ID"},
-                        "recording_id": {"type": "string", "description": "Recording ID"}
+                        "recording_id": {"type": "string", "description": "Recording ID"},
+                        "page": {"type": "integer", "description": "Page number for pagination (default: 1). Basecamp uses geared pagination: page 1 has 15 results, page 2 has 30, page 3 has 50, page 4+ has 100.", "default": 1}
                     },
                     "required": ["project_id", "recording_id"]
+                }
+            },
+            {
+                "name": "get_recordings",
+                "description": "Get recordings of a specific type across projects (global activity feed). Use this to browse recent activity across all projects or within specific ones.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "type": {"type": "string", "description": "Recording type. Must be one of: Comment, Document, Kanban::Card, Kanban::Step, Message, Question::Answer, Schedule::Entry, Todo, Todolist, Upload, Vault"},
+                        "bucket": {"type": "string", "description": "Optional comma-separated project IDs to filter by (e.g. '123' or '123,456'). Defaults to all active projects."},
+                        "status": {"type": "string", "description": "Filter by status: active, archived, or trashed (default: active)", "default": "active"},
+                        "sort": {"type": "string", "description": "Sort field: created_at or updated_at (default: created_at)", "default": "created_at"},
+                        "direction": {"type": "string", "description": "Sort direction: desc or asc (default: desc)", "default": "desc"},
+                        "page": {"type": "integer", "description": "Page number for pagination (default: 1)", "default": 1}
+                    },
+                    "required": ["type"]
                 }
             },
             {
@@ -703,6 +720,85 @@ class MCPServer:
                         "document_id": {"type": "string", "description": "Document ID"}
                     },
                     "required": ["project_id", "document_id"]
+                }
+            },
+            # Timeline tools
+            {
+                "name": "get_timeline",
+                "description": "Get timeline events across all projects (global activity feed). Shows recent activity like messages posted, to-dos completed, files uploaded, etc.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "page": {"type": "integer", "description": "Page number for pagination (default: 1)", "default": 1}
+                    },
+                    "required": []
+                }
+            },
+            {
+                "name": "get_project_timeline",
+                "description": "Get timeline events for a specific project",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "project_id": {"type": "string", "description": "The project ID"},
+                        "page": {"type": "integer", "description": "Page number for pagination (default: 1)", "default": 1}
+                    },
+                    "required": ["project_id"]
+                }
+            },
+            {
+                "name": "get_person_timeline",
+                "description": "Get timeline events created by a specific person",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "person_id": {"type": "string", "description": "The person ID"},
+                        "page": {"type": "integer", "description": "Page number for pagination (default: 1)", "default": 1}
+                    },
+                    "required": ["person_id"]
+                }
+            },
+            # Report tools
+            {
+                "name": "get_todo_assignees",
+                "description": "Get list of all people who can have to-dos assigned to them",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            },
+            {
+                "name": "get_person_todos",
+                "description": "Get all active, pending to-dos assigned to a person",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "person_id": {"type": "string", "description": "The person ID"},
+                        "group_by": {"type": "string", "description": "Group by 'bucket' (project) or 'date' (due date). Default: 'bucket'.", "default": "bucket"}
+                    },
+                    "required": ["person_id"]
+                }
+            },
+            {
+                "name": "get_overdue_todos",
+                "description": "Get all overdue to-dos across all projects, grouped by how late they are",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            },
+            {
+                "name": "get_upcoming_schedule",
+                "description": "Get schedule entries and assignable items within a date window",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "window_starts_on": {"type": "string", "description": "Start date in YYYY-MM-DD format"},
+                        "window_ends_on": {"type": "string", "description": "End date in YYYY-MM-DD format"}
+                    },
+                    "required": ["window_starts_on", "window_ends_on"]
                 }
             }
         ]
@@ -1370,11 +1466,26 @@ class MCPServer:
             elif tool_name == "get_events":
                 project_id = arguments.get("project_id")
                 recording_id = arguments.get("recording_id")
-                events = client.get_events(project_id, recording_id)
+                page = arguments.get("page", 1)
+                events = client.get_events(project_id, recording_id, page)
                 return {
                     "status": "success",
                     "events": events,
                     "count": len(events)
+                }
+
+            elif tool_name == "get_recordings":
+                type_ = arguments.get("type")
+                bucket = arguments.get("bucket")
+                status = arguments.get("status", "active")
+                sort = arguments.get("sort", "created_at")
+                direction = arguments.get("direction", "desc")
+                page = arguments.get("page", 1)
+                recordings = client.get_recordings(type_, bucket, status, sort, direction, page)
+                return {
+                    "status": "success",
+                    "recordings": recordings,
+                    "count": len(recordings)
                 }
 
             elif tool_name == "get_webhooks":
@@ -1453,6 +1564,79 @@ class MCPServer:
                 return {
                     "status": "success",
                     "message": "Document trashed"
+                }
+
+            # Timeline tools
+            elif tool_name == "get_timeline":
+                page = arguments.get("page", 1)
+                events = client.get_timeline(page)
+                return {
+                    "status": "success",
+                    "events": events,
+                    "count": len(events),
+                    "page": page
+                }
+
+            elif tool_name == "get_project_timeline":
+                project_id = arguments.get("project_id")
+                page = arguments.get("page", 1)
+                events = client.get_project_timeline(project_id, page)
+                return {
+                    "status": "success",
+                    "events": events,
+                    "count": len(events),
+                    "page": page
+                }
+
+            elif tool_name == "get_person_timeline":
+                person_id = arguments.get("person_id")
+                page = arguments.get("page", 1)
+                result = client.get_person_timeline(person_id, page)
+                return {
+                    "status": "success",
+                    "person": result.get("person"),
+                    "events": result.get("events", []),
+                    "count": len(result.get("events", [])),
+                    "page": page
+                }
+
+            # Report tools
+            elif tool_name == "get_todo_assignees":
+                people = client.get_todo_assignees()
+                return {
+                    "status": "success",
+                    "people": people,
+                    "count": len(people)
+                }
+
+            elif tool_name == "get_person_todos":
+                person_id = arguments.get("person_id")
+                group_by = arguments.get("group_by", "bucket")
+                result = client.get_person_todos(person_id, group_by)
+                return {
+                    "status": "success",
+                    "person": result.get("person"),
+                    "grouped_by": result.get("grouped_by"),
+                    "todos": result.get("todos", []),
+                    "count": len(result.get("todos", []))
+                }
+
+            elif tool_name == "get_overdue_todos":
+                result = client.get_overdue_todos()
+                return {
+                    "status": "success",
+                    "overdue_todos": result
+                }
+
+            elif tool_name == "get_upcoming_schedule":
+                window_starts_on = arguments.get("window_starts_on")
+                window_ends_on = arguments.get("window_ends_on")
+                result = client.get_upcoming_schedule(window_starts_on, window_ends_on)
+                return {
+                    "status": "success",
+                    "schedule_entries": result.get("schedule_entries", []),
+                    "recurring_schedule_entry_occurrences": result.get("recurring_schedule_entry_occurrences", []),
+                    "assignables": result.get("assignables", [])
                 }
 
             else:
