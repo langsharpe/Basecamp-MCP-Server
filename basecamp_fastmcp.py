@@ -20,6 +20,7 @@ from search_utils import BasecampSearch
 import token_storage
 import auth_manager
 from dotenv import load_dotenv
+from compact_response import compact_list
 
 # Determine project root (directory containing this script)
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -100,14 +101,20 @@ async def _run_sync(func, *args, **kwargs):
 # Core MCP Tools - Starting with essential ones from original server
 
 @mcp.tool()
-async def get_projects() -> Dict[str, Any]:
-    """Get all Basecamp projects."""
+async def get_projects(compact: bool = False) -> Dict[str, Any]:
+    """Get all Basecamp projects.
+
+    Args:
+        compact: If True, return only essential fields (id, name, description, url)
+    """
     client = _get_basecamp_client()
     if not client:
         return _get_auth_error_response()
     
     try:
         projects = await _run_sync(client.get_projects)
+        if compact:
+            projects = compact_list(projects, "project")
         return {
             "status": "success",
             "projects": projects,
@@ -155,12 +162,13 @@ async def get_project(project_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def search_basecamp(query: str, project_id: Optional[str] = None) -> Dict[str, Any]:
+async def search_basecamp(query: str, project_id: Optional[str] = None, compact: bool = False) -> Dict[str, Any]:
     """Search across Basecamp projects, todos, and messages.
     
     Args:
         query: Search query
         project_id: Optional project ID to limit search scope
+        compact: If True, return only essential fields for each result type
     """
     client = _get_basecamp_client()
     if not client:
@@ -180,6 +188,12 @@ async def search_basecamp(query: str, project_id: Optional[str] = None) -> Dict[
             results["todos"] = await _run_sync(search.search_todos, query)
             results["messages"] = await _run_sync(search.search_messages, query)
 
+        if compact:
+            type_map = {"projects": "project", "todos": "todo", "todolists": "todolist", "messages": "message"}
+            for key, resource_type in type_map.items():
+                if key in results:
+                    results[key] = compact_list(results[key], resource_type)
+
         return {
             "status": "success",
             "query": query,
@@ -198,11 +212,12 @@ async def search_basecamp(query: str, project_id: Optional[str] = None) -> Dict[
         }
 
 @mcp.tool()
-async def get_todolists(project_id: str) -> Dict[str, Any]:
+async def get_todolists(project_id: str, compact: bool = False) -> Dict[str, Any]:
     """Get todo lists for a project.
     
     Args:
         project_id: The project ID
+        compact: If True, return only essential fields (id, title, completed, url)
     """
     client = _get_basecamp_client()
     if not client:
@@ -210,6 +225,8 @@ async def get_todolists(project_id: str) -> Dict[str, Any]:
     
     try:
         todolists = await _run_sync(client.get_todolists, project_id)
+        if compact:
+            todolists = compact_list(todolists, "todolist")
         return {
             "status": "success",
             "todolists": todolists,
@@ -228,12 +245,13 @@ async def get_todolists(project_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_todos(project_id: str, todolist_id: str) -> Dict[str, Any]:
+async def get_todos(project_id: str, todolist_id: str, compact: bool = False) -> Dict[str, Any]:
     """Get todos from a todo list.
     
     Args:
         project_id: Project ID
         todolist_id: The todo list ID
+        compact: If True, return only essential fields (id, title, assignee names, due_on, completed, url)
     """
     client = _get_basecamp_client()
     if not client:
@@ -241,6 +259,8 @@ async def get_todos(project_id: str, todolist_id: str) -> Dict[str, Any]:
     
     try:
         todos = await _run_sync(client.get_todos, project_id, todolist_id)
+        if compact:
+            todos = compact_list(todos, "todo")
         return {
             "status": "success",
             "todos": todos,
@@ -499,11 +519,12 @@ async def uncomplete_todo(project_id: str, todo_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def global_search(query: str) -> Dict[str, Any]:
+async def global_search(query: str, compact: bool = False) -> Dict[str, Any]:
     """Search projects, todos and campfire messages across all projects.
     
     Args:
         query: Search query
+        compact: If True, return only essential fields for each result type
     """
     client = _get_basecamp_client()
     if not client:
@@ -512,6 +533,11 @@ async def global_search(query: str) -> Dict[str, Any]:
     try:
         search = BasecampSearch(client=client)
         results = await _run_sync(search.global_search, query)
+        if compact and isinstance(results, dict):
+            type_map = {"projects": "project", "todos": "todo", "todolists": "todolist", "messages": "message"}
+            for key, resource_type in type_map.items():
+                if key in results and isinstance(results[key], list):
+                    results[key] = compact_list(results[key], resource_type)
         return {
             "status": "success",
             "query": query,
@@ -530,7 +556,7 @@ async def global_search(query: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_comments(recording_id: str, project_id: str, page: int = 1) -> Dict[str, Any]:
+async def get_comments(recording_id: str, project_id: str, page: int = 1, compact: bool = False) -> Dict[str, Any]:
     """Get comments for a Basecamp item.
 
     Args:
@@ -538,6 +564,7 @@ async def get_comments(recording_id: str, project_id: str, page: int = 1) -> Dic
         project_id: The project ID
         page: Page number for pagination (default: 1). Basecamp uses geared pagination:
               page 1 has 15 results, page 2 has 30, page 3 has 50, page 4+ has 100.
+        compact: If True, return only essential fields (id, creator name, created_at, url, truncated content)
     """
     client = _get_basecamp_client()
     if not client:
@@ -545,9 +572,12 @@ async def get_comments(recording_id: str, project_id: str, page: int = 1) -> Dic
 
     try:
         result = await _run_sync(client.get_comments, project_id, recording_id, page)
+        comments = result["comments"]
+        if compact:
+            comments = compact_list(comments, "comment")
         return {
             "status": "success",
-            "comments": result["comments"],
+            "comments": comments,
             "count": len(result["comments"]),
             "page": page,
             "total_count": result["total_count"],
@@ -598,12 +628,13 @@ async def create_comment(recording_id: str, project_id: str, content: str) -> Di
         }
 
 @mcp.tool()
-async def get_campfire_lines(project_id: str, campfire_id: str) -> Dict[str, Any]:
+async def get_campfire_lines(project_id: str, campfire_id: str, compact: bool = False) -> Dict[str, Any]:
     """Get recent messages from a Basecamp campfire (chat room).
     
     Args:
         project_id: The project ID
         campfire_id: The campfire/chat room ID
+        compact: If True, return only essential fields (id, created_at, truncated content)
     """
     client = _get_basecamp_client()
     if not client:
@@ -611,6 +642,8 @@ async def get_campfire_lines(project_id: str, campfire_id: str) -> Dict[str, Any
     
     try:
         lines = await _run_sync(client.get_campfire_lines, project_id, campfire_id)
+        if compact:
+            lines = compact_list(lines, "campfire_line")
         return {
             "status": "success",
             "campfire_lines": lines,
@@ -658,12 +691,13 @@ async def get_message_board(project_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_messages(project_id: str, message_board_id: Optional[str] = None) -> Dict[str, Any]:
+async def get_messages(project_id: str, message_board_id: Optional[str] = None, compact: bool = False) -> Dict[str, Any]:
     """Get all messages from a project's message board.
 
     Args:
         project_id: The project ID
         message_board_id: Optional message board ID. If not provided, will be auto-discovered from the project.
+        compact: If True, return only essential fields (id, subject, creator name, created_at, url)
     """
     client = _get_basecamp_client()
     if not client:
@@ -671,6 +705,8 @@ async def get_messages(project_id: str, message_board_id: Optional[str] = None) 
 
     try:
         messages = await _run_sync(client.get_messages, project_id, message_board_id)
+        if compact:
+            messages = compact_list(messages, "message")
         return {
             "status": "success",
             "messages": messages,
@@ -751,12 +787,13 @@ async def get_inbox(project_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def get_forwards(project_id: str, inbox_id: Optional[str] = None) -> Dict[str, Any]:
+async def get_forwards(project_id: str, inbox_id: Optional[str] = None, compact: bool = False) -> Dict[str, Any]:
     """Get all forwarded emails from a project's inbox.
 
     Args:
         project_id: The project ID
         inbox_id: Optional inbox ID. If not provided, will be auto-discovered from the project.
+        compact: If True, return only essential fields (id, subject, created_at, url)
     """
     client = _get_basecamp_client()
     if not client:
@@ -764,6 +801,8 @@ async def get_forwards(project_id: str, inbox_id: Optional[str] = None) -> Dict[
 
     try:
         forwards = await _run_sync(client.get_forwards, project_id, inbox_id)
+        if compact:
+            forwards = compact_list(forwards, "forward")
         return {
             "status": "success",
             "forwards": forwards,
@@ -814,12 +853,13 @@ async def get_forward(project_id: str, forward_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def get_inbox_replies(project_id: str, forward_id: str) -> Dict[str, Any]:
+async def get_inbox_replies(project_id: str, forward_id: str, compact: bool = False) -> Dict[str, Any]:
     """Get all replies to a forwarded email.
 
     Args:
         project_id: The project ID
         forward_id: The forward ID
+        compact: If True, return only essential fields (id, created_at, url)
     """
     client = _get_basecamp_client()
     if not client:
@@ -827,6 +867,8 @@ async def get_inbox_replies(project_id: str, forward_id: str) -> Dict[str, Any]:
 
     try:
         replies = await _run_sync(client.get_inbox_replies, project_id, forward_id)
+        if compact:
+            replies = compact_list(replies, "reply")
         return {
             "status": "success",
             "replies": replies,
@@ -909,11 +951,12 @@ async def trash_forward(project_id: str, forward_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def get_card_tables(project_id: str) -> Dict[str, Any]:
+async def get_card_tables(project_id: str, compact: bool = False) -> Dict[str, Any]:
     """Get all card tables for a project.
     
     Args:
         project_id: The project ID
+        compact: If True, return only essential fields (id, title)
     """
     client = _get_basecamp_client()
     if not client:
@@ -921,6 +964,8 @@ async def get_card_tables(project_id: str) -> Dict[str, Any]:
     
     try:
         card_tables = await _run_sync(client.get_card_tables, project_id)
+        if compact:
+            card_tables = compact_list(card_tables, "card_table")
         return {
             "status": "success",
             "card_tables": card_tables,
@@ -971,12 +1016,13 @@ async def get_card_table(project_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_columns(project_id: str, card_table_id: str) -> Dict[str, Any]:
+async def get_columns(project_id: str, card_table_id: str, compact: bool = False) -> Dict[str, Any]:
     """Get all columns in a card table.
     
     Args:
         project_id: The project ID
         card_table_id: The card table ID
+        compact: If True, return only essential fields (id, title, cards_count)
     """
     client = _get_basecamp_client()
     if not client:
@@ -984,6 +1030,8 @@ async def get_columns(project_id: str, card_table_id: str) -> Dict[str, Any]:
     
     try:
         columns = await _run_sync(client.get_columns, project_id, card_table_id)
+        if compact:
+            columns = compact_list(columns, "column")
         return {
             "status": "success",
             "columns": columns,
@@ -1002,12 +1050,13 @@ async def get_columns(project_id: str, card_table_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_cards(project_id: str, column_id: str) -> Dict[str, Any]:
+async def get_cards(project_id: str, column_id: str, compact: bool = False) -> Dict[str, Any]:
     """Get all cards in a column.
     
     Args:
         project_id: The project ID
         column_id: The column ID
+        compact: If True, return only essential fields (id, title, assignee names, due_on, completed, url)
     """
     client = _get_basecamp_client()
     if not client:
@@ -1015,6 +1064,8 @@ async def get_cards(project_id: str, column_id: str) -> Dict[str, Any]:
     
     try:
         cards = await _run_sync(client.get_cards, project_id, column_id)
+        if compact:
+            cards = compact_list(cards, "card")
         return {
             "status": "success",
             "cards": cards,
@@ -1256,12 +1307,13 @@ async def update_card(project_id: str, card_id: str, title: Optional[str] = None
         }
 
 @mcp.tool()
-async def get_daily_check_ins(project_id: str, page: Optional[int] = None) -> Dict[str, Any]:
+async def get_daily_check_ins(project_id: str, page: Optional[int] = None, compact: bool = False) -> Dict[str, Any]:
     """Get project's daily checking questionnaire.
     
     Args:
         project_id: The project ID
         page: Page number paginated response
+        compact: If True, return only essential fields
     """
     client = _get_basecamp_client()
     if not client:
@@ -1271,6 +1323,8 @@ async def get_daily_check_ins(project_id: str, page: Optional[int] = None) -> Di
         if page is not None and not isinstance(page, int):
             page = 1
         answers = await _run_sync(client.get_daily_check_ins, project_id, page=page or 1)
+        if compact:
+            answers = compact_list(answers, "campfire_line")
         return {
             "status": "success",
             "campfire_lines": answers,
@@ -1289,13 +1343,14 @@ async def get_daily_check_ins(project_id: str, page: Optional[int] = None) -> Di
         }
 
 @mcp.tool()
-async def get_question_answers(project_id: str, question_id: str, page: Optional[int] = None) -> Dict[str, Any]:
+async def get_question_answers(project_id: str, question_id: str, page: Optional[int] = None, compact: bool = False) -> Dict[str, Any]:
     """Get answers on daily check-in question.
     
     Args:
         project_id: The project ID
         question_id: The question ID
         page: Page number paginated response
+        compact: If True, return only essential fields
     """
     client = _get_basecamp_client()
     if not client:
@@ -1305,6 +1360,8 @@ async def get_question_answers(project_id: str, question_id: str, page: Optional
         if page is not None and not isinstance(page, int):
             page = 1
         answers = await _run_sync(client.get_question_answers, project_id, question_id, page=page or 1)
+        if compact:
+            answers = compact_list(answers, "campfire_line")
         return {
             "status": "success",
             "campfire_lines": answers,
@@ -1572,12 +1629,13 @@ async def uncomplete_card(project_id: str, card_id: str) -> Dict[str, Any]:
 
 # Card Steps (Sub-tasks) Management
 @mcp.tool()
-async def get_card_steps(project_id: str, card_id: str) -> Dict[str, Any]:
+async def get_card_steps(project_id: str, card_id: str, compact: bool = False) -> Dict[str, Any]:
     """Get all steps (sub-tasks) for a card.
     
     Args:
         project_id: The project ID
         card_id: The card ID
+        compact: If True, return only essential fields (id, title, assignee names, completed, due_on)
     """
     client = _get_basecamp_client()
     if not client:
@@ -1585,6 +1643,8 @@ async def get_card_steps(project_id: str, card_id: str) -> Dict[str, Any]:
     
     try:
         steps = await _run_sync(client.get_card_steps, project_id, card_id)
+        if compact:
+            steps = compact_list(steps, "step")
         return {
             "status": "success",
             "steps": steps,
@@ -1823,7 +1883,7 @@ async def create_attachment(file_path: str, name: str, content_type: Optional[st
         }
 
 @mcp.tool()
-async def get_events(project_id: str, recording_id: str, page: int = 1) -> Dict[str, Any]:
+async def get_events(project_id: str, recording_id: str, page: int = 1, compact: bool = False) -> Dict[str, Any]:
     """Get events for a recording.
 
     Args:
@@ -1831,6 +1891,7 @@ async def get_events(project_id: str, recording_id: str, page: int = 1) -> Dict[
         recording_id: Recording ID
         page: Page number for pagination (default: 1). Basecamp uses geared pagination:
               page 1 has 15 results, page 2 has 30, page 3 has 50, page 4+ has 100.
+        compact: If True, return only essential fields (id, action, created_at)
     """
     client = _get_basecamp_client()
     if not client:
@@ -1838,6 +1899,8 @@ async def get_events(project_id: str, recording_id: str, page: int = 1) -> Dict[
 
     try:
         events = await _run_sync(client.get_events, project_id, recording_id, page)
+        if compact:
+            events = compact_list(events, "event")
         return {
             "status": "success",
             "events": events,
@@ -1856,7 +1919,7 @@ async def get_events(project_id: str, recording_id: str, page: int = 1) -> Dict[
         }
 
 @mcp.tool()
-async def get_recordings(type: str, bucket: Optional[str] = None, status: str = "active", sort: str = "created_at", direction: str = "desc", page: int = 1) -> Dict[str, Any]:
+async def get_recordings(type: str, bucket: Optional[str] = None, status: str = "active", sort: str = "created_at", direction: str = "desc", page: int = 1, compact: bool = False) -> Dict[str, Any]:
     """Get recordings of a specific type across projects (global activity feed).
 
     Use this to browse recent activity across all projects or within specific ones.
@@ -1872,6 +1935,7 @@ async def get_recordings(type: str, bucket: Optional[str] = None, status: str = 
         sort: Sort field: created_at or updated_at (default: created_at)
         direction: Sort direction: desc or asc (default: desc)
         page: Page number for pagination (default: 1)
+        compact: If True, return only essential fields (id, title, type, created_at, url)
     """
     client = _get_basecamp_client()
     if not client:
@@ -1879,6 +1943,8 @@ async def get_recordings(type: str, bucket: Optional[str] = None, status: str = 
 
     try:
         recordings = await _run_sync(client.get_recordings, type, bucket, status, sort, direction, page)
+        if compact:
+            recordings = compact_list(recordings, "recording")
         return {
             "status": "success",
             "recordings": recordings,
@@ -1897,11 +1963,12 @@ async def get_recordings(type: str, bucket: Optional[str] = None, status: str = 
         }
 
 @mcp.tool()
-async def get_webhooks(project_id: str) -> Dict[str, Any]:
+async def get_webhooks(project_id: str, compact: bool = False) -> Dict[str, Any]:
     """List webhooks for a project.
     
     Args:
         project_id: Project ID
+        compact: If True, return only essential fields (id, payload_url, active)
     """
     client = _get_basecamp_client()
     if not client:
@@ -1909,6 +1976,8 @@ async def get_webhooks(project_id: str) -> Dict[str, Any]:
     
     try:
         hooks = await _run_sync(client.get_webhooks, project_id)
+        if compact:
+            hooks = compact_list(hooks, "webhook")
         return {
             "status": "success",
             "webhooks": hooks,
@@ -1989,12 +2058,13 @@ async def delete_webhook(project_id: str, webhook_id: str) -> Dict[str, Any]:
 
 # Document Management
 @mcp.tool()
-async def get_documents(project_id: str, vault_id: str) -> Dict[str, Any]:
+async def get_documents(project_id: str, vault_id: str, compact: bool = False) -> Dict[str, Any]:
     """List documents in a vault.
     
     Args:
         project_id: Project ID
         vault_id: Vault ID
+        compact: If True, return only essential fields (id, title, creator name, created_at, url)
     """
     client = _get_basecamp_client()
     if not client:
@@ -2002,6 +2072,8 @@ async def get_documents(project_id: str, vault_id: str) -> Dict[str, Any]:
     
     try:
         docs = await _run_sync(client.get_documents, project_id, vault_id)
+        if compact:
+            docs = compact_list(docs, "document")
         return {
             "status": "success",
             "documents": docs,
@@ -2145,12 +2217,13 @@ async def trash_document(project_id: str, document_id: str) -> Dict[str, Any]:
 
 # Upload Management
 @mcp.tool()
-async def get_uploads(project_id: str, vault_id: Optional[str] = None) -> Dict[str, Any]:
+async def get_uploads(project_id: str, vault_id: Optional[str] = None, compact: bool = False) -> Dict[str, Any]:
     """List uploads in a project or vault.
     
     Args:
         project_id: Project ID
         vault_id: Optional vault ID to limit to specific vault
+        compact: If True, return only essential fields (id, title, filename, created_at, url)
     """
     client = _get_basecamp_client()
     if not client:
@@ -2158,6 +2231,8 @@ async def get_uploads(project_id: str, vault_id: Optional[str] = None) -> Dict[s
     
     try:
         uploads = await _run_sync(client.get_uploads, project_id, vault_id)
+        if compact:
+            uploads = compact_list(uploads, "upload")
         return {
             "status": "success",
             "uploads": uploads,
@@ -2207,13 +2282,14 @@ async def get_upload(project_id: str, upload_id: str) -> Dict[str, Any]:
 
 # Timeline Tools
 @mcp.tool()
-async def get_timeline(page: int = 1) -> Dict[str, Any]:
+async def get_timeline(page: int = 1, compact: bool = False) -> Dict[str, Any]:
     """Get timeline events across all projects (global activity feed).
 
     Shows recent activity like messages posted, to-dos completed, files uploaded, etc.
 
     Args:
         page: Page number for pagination (default: 1)
+        compact: If True, return only essential fields (id, action, created_at)
     """
     client = _get_basecamp_client()
     if not client:
@@ -2221,6 +2297,8 @@ async def get_timeline(page: int = 1) -> Dict[str, Any]:
 
     try:
         events = await _run_sync(client.get_timeline, page)
+        if compact:
+            events = compact_list(events, "event")
         return {
             "status": "success",
             "events": events,
@@ -2240,12 +2318,13 @@ async def get_timeline(page: int = 1) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_project_timeline(project_id: str, page: int = 1) -> Dict[str, Any]:
+async def get_project_timeline(project_id: str, page: int = 1, compact: bool = False) -> Dict[str, Any]:
     """Get timeline events for a specific project.
 
     Args:
         project_id: The project ID
         page: Page number for pagination (default: 1)
+        compact: If True, return only essential fields (id, action, created_at)
     """
     client = _get_basecamp_client()
     if not client:
@@ -2253,6 +2332,8 @@ async def get_project_timeline(project_id: str, page: int = 1) -> Dict[str, Any]
 
     try:
         events = await _run_sync(client.get_project_timeline, project_id, page)
+        if compact:
+            events = compact_list(events, "event")
         return {
             "status": "success",
             "events": events,
@@ -2272,12 +2353,13 @@ async def get_project_timeline(project_id: str, page: int = 1) -> Dict[str, Any]
         }
 
 @mcp.tool()
-async def get_person_timeline(person_id: str, page: int = 1) -> Dict[str, Any]:
+async def get_person_timeline(person_id: str, page: int = 1, compact: bool = False) -> Dict[str, Any]:
     """Get timeline events created by a specific person.
 
     Args:
         person_id: The person ID
         page: Page number for pagination (default: 1)
+        compact: If True, return only essential fields (id, action, created_at)
     """
     client = _get_basecamp_client()
     if not client:
@@ -2285,10 +2367,13 @@ async def get_person_timeline(person_id: str, page: int = 1) -> Dict[str, Any]:
 
     try:
         result = await _run_sync(client.get_person_timeline, person_id, page)
+        events = result.get("events", [])
+        if compact:
+            events = compact_list(events, "event")
         return {
             "status": "success",
             "person": result.get("person"),
-            "events": result.get("events", []),
+            "events": events,
             "count": len(result.get("events", [])),
             "page": page
         }
@@ -2332,12 +2417,13 @@ async def get_todo_assignees() -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_person_todos(person_id: str, group_by: str = "bucket") -> Dict[str, Any]:
+async def get_person_todos(person_id: str, group_by: str = "bucket", compact: bool = False) -> Dict[str, Any]:
     """Get all active, pending to-dos assigned to a person.
 
     Args:
         person_id: The person ID
         group_by: Group by 'bucket' (project) or 'date' (due date). Default: 'bucket'.
+        compact: If True, return only essential fields (id, title, assignee names, due_on, completed, url)
     """
     client = _get_basecamp_client()
     if not client:
@@ -2345,11 +2431,14 @@ async def get_person_todos(person_id: str, group_by: str = "bucket") -> Dict[str
 
     try:
         result = await _run_sync(client.get_person_todos, person_id, group_by)
+        todos = result.get("todos", [])
+        if compact:
+            todos = compact_list(todos, "todo")
         return {
             "status": "success",
             "person": result.get("person"),
             "grouped_by": result.get("grouped_by"),
-            "todos": result.get("todos", []),
+            "todos": todos,
             "count": len(result.get("todos", []))
         }
     except Exception as e:
@@ -2365,10 +2454,13 @@ async def get_person_todos(person_id: str, group_by: str = "bucket") -> Dict[str
         }
 
 @mcp.tool()
-async def get_overdue_todos() -> Dict[str, Any]:
+async def get_overdue_todos(compact: bool = False) -> Dict[str, Any]:
     """Get all overdue to-dos across all projects, grouped by how late they are.
 
     Returns groups: under_a_week_late, over_a_week_late, over_a_month_late, over_three_months_late.
+
+    Args:
+        compact: If True, return only essential fields (id, title, assignee names, due_on, completed, url)
     """
     client = _get_basecamp_client()
     if not client:
@@ -2376,6 +2468,10 @@ async def get_overdue_todos() -> Dict[str, Any]:
 
     try:
         result = await _run_sync(client.get_overdue_todos)
+        if compact and isinstance(result, dict):
+            for group_key in result:
+                if isinstance(result[group_key], list):
+                    result[group_key] = compact_list(result[group_key], "todo")
         return {
             "status": "success",
             "overdue_todos": result
@@ -2393,12 +2489,13 @@ async def get_overdue_todos() -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_upcoming_schedule(window_starts_on: str, window_ends_on: str) -> Dict[str, Any]:
+async def get_upcoming_schedule(window_starts_on: str, window_ends_on: str, compact: bool = False) -> Dict[str, Any]:
     """Get schedule entries and assignable items within a date window.
 
     Args:
         window_starts_on: Start date in YYYY-MM-DD format
         window_ends_on: End date in YYYY-MM-DD format
+        compact: If True, return only essential fields (id, title, type, created_at, url)
     """
     client = _get_basecamp_client()
     if not client:
@@ -2408,11 +2505,18 @@ async def get_upcoming_schedule(window_starts_on: str, window_ends_on: str) -> D
         result = await _run_sync(
             lambda: client.get_upcoming_schedule(window_starts_on, window_ends_on)
         )
+        schedule_entries = result.get("schedule_entries", [])
+        recurring = result.get("recurring_schedule_entry_occurrences", [])
+        assignables = result.get("assignables", [])
+        if compact:
+            schedule_entries = compact_list(schedule_entries, "recording")
+            recurring = compact_list(recurring, "recording")
+            assignables = compact_list(assignables, "recording")
         return {
             "status": "success",
-            "schedule_entries": result.get("schedule_entries", []),
-            "recurring_schedule_entry_occurrences": result.get("recurring_schedule_entry_occurrences", []),
-            "assignables": result.get("assignables", [])
+            "schedule_entries": schedule_entries,
+            "recurring_schedule_entry_occurrences": recurring,
+            "assignables": assignables
         }
     except Exception as e:
         logger.error(f"Error getting upcoming schedule: {e}")

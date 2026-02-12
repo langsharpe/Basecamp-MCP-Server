@@ -48,6 +48,7 @@ python generate_claude_desktop_config.py   # For Claude Desktop
 | `basecamp_oauth.py` | OAuth 2.0 client for 37signals Launchpad |
 | `auth_manager.py` | Automatic token refresh before API calls |
 | `token_storage.py` | Thread-safe OAuth token persistence (`oauth_tokens.json`) |
+| `compact_response.py` | Compact/summary response filtering for list-returning tools |
 | `search_utils.py` | Cross-project search functionality |
 | `oauth_app.py` | Flask app for OAuth flow (browser-based login) |
 
@@ -129,6 +130,25 @@ def new_api_method(self, project_id, resource_id):
     else:
         raise Exception(f"Failed: {response.status_code} - {response.text}")
 ```
+
+### Compact Mode for List-Returning Tools
+
+Most list-returning tools accept `compact: bool = False`. When `True`, responses are filtered to only essential fields (id, title, assignee names, URL, etc.) via `compact_response.py`. This reduces response size by ~90% for AI agents.
+
+```python
+# In basecamp_fastmcp.py — pattern for list-returning tools
+from compact_response import compact_list
+
+@mcp.tool()
+async def get_cards(project_id: str, column_id: str, compact: bool = False) -> Dict[str, Any]:
+    ...
+    cards = await _run_sync(client.get_cards, project_id, column_id)
+    if compact:
+        cards = compact_list(cards, "card")
+    return {"status": "success", "cards": cards, "count": len(cards)}
+```
+
+Field mappings per resource type are defined in `COMPACT_FIELDS` in `compact_response.py`. To add a new resource type, add an entry to that dict.
 
 ### Pagination Handling
 
