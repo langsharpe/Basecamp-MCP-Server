@@ -3006,6 +3006,491 @@ async def get_todolist(project_id: str, todolist_id: str) -> Dict[str, Any]:
         }
 
 
+# People Management Tools
+@mcp.tool()
+async def get_person(project_id: str, person_id: str) -> Dict[str, Any]:
+    """Get a specific person by ID.
+
+    Args:
+        project_id: The project ID (unused, kept for consistency)
+        person_id: The person ID
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        person = await _run_sync(client.get_person, person_id)
+        return {
+            "status": "success",
+            "person": person
+        }
+    except Exception as e:
+        logger.error(f"Error getting person {person_id}: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def get_my_profile() -> Dict[str, Any]:
+    """Get the current authenticated user's profile."""
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        profile = await _run_sync(client.get_my_profile)
+        return {
+            "status": "success",
+            "person": profile
+        }
+    except Exception as e:
+        logger.error(f"Error getting profile: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def get_project_people(project_id: str, compact: bool = False) -> Dict[str, Any]:
+    """Get all people on a project.
+
+    Args:
+        project_id: The project ID
+        compact: If True, return only essential fields (id, name, email_address, admin, avatar_url)
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        people = await _run_sync(client.get_project_people, project_id)
+        if compact:
+            people = compact_list(people, "person")
+        return {
+            "status": "success",
+            "people": people,
+            "count": len(people)
+        }
+    except Exception as e:
+        logger.error(f"Error getting project people: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def update_project_access(project_id: str,
+                                grant: Optional[List[str]] = None,
+                                revoke: Optional[List[str]] = None,
+                                create: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
+    """Manage project access — grant or revoke people, or invite new people.
+
+    Args:
+        project_id: The project ID
+        grant: List of person IDs to add to the project
+        revoke: List of person IDs to remove from the project
+        create: List of new people dicts with keys: name, email_address, and optional title, company_name
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        if all(v is None for v in [grant, revoke, create]):
+            return {
+                "error": "Invalid input",
+                "message": "At least one of grant, revoke, or create must be provided"
+            }
+        result = await _run_sync(
+            lambda: client.update_project_access(
+                project_id, grant=grant, revoke=revoke, create=create
+            )
+        )
+        return {
+            "status": "success",
+            "result": result,
+            "message": "Project access updated successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error updating project access: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def get_pingable_people(compact: bool = False) -> Dict[str, Any]:
+    """Get all people who can be pinged on this account.
+
+    Args:
+        compact: If True, return only essential fields (id, name, email_address, admin, avatar_url)
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        people = await _run_sync(client.get_pingable_people)
+        if compact:
+            people = compact_list(people, "person")
+        return {
+            "status": "success",
+            "people": people,
+            "count": len(people)
+        }
+    except Exception as e:
+        logger.error(f"Error getting pingable people: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+# Native Search Tool
+@mcp.tool()
+async def native_search(query: str, type: Optional[str] = None,
+                        bucket_id: Optional[str] = None,
+                        creator_id: Optional[str] = None,
+                        file_type: Optional[str] = None,
+                        exclude_chat: Optional[int] = None,
+                        page: int = 1, per_page: int = 50,
+                        compact: bool = False) -> Dict[str, Any]:
+    """Search Basecamp using the native server-side search API.
+
+    Results are ordered by relevance with a recency boost.
+
+    Args:
+        query: Search query string (required)
+        type: Filter by recording type (e.g. 'Todo', 'Message', 'Document')
+        bucket_id: Filter by project ID
+        creator_id: Filter by person ID
+        file_type: Filter attachments by file type
+        exclude_chat: Set to 1 to exclude chat results
+        page: Page number (default: 1)
+        per_page: Results per page (default: 50)
+        compact: If True, return only essential fields
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        results = await _run_sync(
+            lambda: client.search(
+                query, type=type, bucket_id=bucket_id,
+                creator_id=creator_id, file_type=file_type,
+                exclude_chat=exclude_chat, page=page, per_page=per_page
+            )
+        )
+        if compact and isinstance(results, list):
+            results = compact_list(results, "recording")
+        return {
+            "status": "success",
+            "query": query,
+            "results": results,
+            "count": len(results) if isinstance(results, list) else 0,
+            "page": page
+        }
+    except Exception as e:
+        logger.error(f"Error in native search: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+# Todolist CRUD Tools
+@mcp.tool()
+async def create_todolist(project_id: str, name: str,
+                          description: Optional[str] = None) -> Dict[str, Any]:
+    """Create a new todolist in a project.
+
+    Args:
+        project_id: The project ID
+        name: Todolist name (required)
+        description: HTML description (optional)
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        todolist = await _run_sync(
+            lambda: client.create_todolist(project_id, name, description=description)
+        )
+        return {
+            "status": "success",
+            "todolist": todolist,
+            "message": f"Todolist '{name}' created successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error creating todolist: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def update_todolist(project_id: str, todolist_id: str, name: str,
+                          description: Optional[str] = None) -> Dict[str, Any]:
+    """Update a todolist.
+
+    Args:
+        project_id: The project ID
+        todolist_id: The todolist ID
+        name: New todolist name (required by Basecamp API)
+        description: New HTML description (optional)
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        todolist = await _run_sync(
+            lambda: client.update_todolist(project_id, todolist_id, name, description=description)
+        )
+        return {
+            "status": "success",
+            "todolist": todolist,
+            "message": "Todolist updated successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error updating todolist: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def trash_todolist(project_id: str, todolist_id: str) -> Dict[str, Any]:
+    """Trash a todolist.
+
+    Args:
+        project_id: The project ID
+        todolist_id: The todolist ID
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        await _run_sync(client.trash_todolist, project_id, todolist_id)
+        return {
+            "status": "success",
+            "message": "Todolist trashed successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error trashing todolist: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+# Todolist Groups Tools
+@mcp.tool()
+async def get_todolist_groups(project_id: str, todolist_id: str,
+                              status: Optional[str] = None,
+                              compact: bool = False) -> Dict[str, Any]:
+    """Get groups (sub-sections) within a todolist.
+
+    Args:
+        project_id: The project ID
+        todolist_id: The todolist ID
+        status: Optional filter: 'archived' or 'trashed'
+        compact: If True, return only essential fields
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        groups = await _run_sync(
+            lambda: client.get_todolist_groups(project_id, todolist_id, status=status)
+        )
+        if compact:
+            groups = compact_list(groups, "todolist")
+        return {
+            "status": "success",
+            "groups": groups,
+            "count": len(groups)
+        }
+    except Exception as e:
+        logger.error(f"Error getting todolist groups: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def create_todolist_group(project_id: str, todolist_id: str, name: str,
+                                color: Optional[str] = None) -> Dict[str, Any]:
+    """Create a group (sub-section) in a todolist.
+
+    Args:
+        project_id: The project ID
+        todolist_id: The todolist ID
+        name: Group name (required)
+        color: Optional color (white, red, orange, yellow, green, blue, aqua, purple, gray, pink, brown)
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        group = await _run_sync(
+            lambda: client.create_todolist_group(project_id, todolist_id, name, color=color)
+        )
+        return {
+            "status": "success",
+            "group": group,
+            "message": f"Group '{name}' created successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error creating todolist group: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def reposition_todolist_group(project_id: str, group_id: str,
+                                    position: int) -> Dict[str, Any]:
+    """Reposition a group within a todolist.
+
+    Args:
+        project_id: The project ID
+        group_id: The group ID
+        position: New 1-based position
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        await _run_sync(client.reposition_todolist_group, project_id, group_id, position)
+        return {
+            "status": "success",
+            "message": f"Group repositioned to position {position}"
+        }
+    except Exception as e:
+        logger.error(f"Error repositioning todolist group: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+# Todo Repositioning Tool
+@mcp.tool()
+async def reposition_todo(project_id: str, todo_id: str, position: int,
+                          parent_id: Optional[str] = None) -> Dict[str, Any]:
+    """Reposition a to-do within its list or move it to a different list.
+
+    Args:
+        project_id: The project ID
+        todo_id: The todo ID
+        position: New 1-based position
+        parent_id: Optional parent todolist ID to move the todo to a different list
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        await _run_sync(
+            lambda: client.reposition_todo(project_id, todo_id, position, parent_id=parent_id)
+        )
+        msg = f"Todo repositioned to position {position}"
+        if parent_id:
+            msg += f" in list {parent_id}"
+        return {
+            "status": "success",
+            "message": msg
+        }
+    except Exception as e:
+        logger.error(f"Error repositioning todo: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
 if __name__ == "__main__":
     logger.info("Starting Basecamp FastMCP server")
     # Run using official MCP stdio transport

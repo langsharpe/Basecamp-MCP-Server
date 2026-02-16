@@ -37,6 +37,7 @@ COMPACT_FIELDS = {
     "person":        ["id", "name", "email_address", "admin", "avatar_url"],
     "campfire":      ["id", "title", "app_url"],
     "schedule_entry": ["id", "title", "starts_at", "ends_at", "all_day", "app_url"],
+    "todolist_group": ["id", "title", "completed_ratio", "app_url"],
 }
 
 # Resource types that should include assignee names

@@ -143,6 +143,154 @@ class BasecampClient:
         else:
             raise Exception(f"Failed to get todolist: {response.status_code} - {response.text}")
 
+    def create_todolist(self, project_id, name, description=None):
+        """Create a new todolist in a project.
+
+        Args:
+            project_id: Project ID
+            name: Todolist name (required)
+            description: HTML description (optional)
+
+        Returns:
+            dict: The created todolist
+        """
+        todoset = self.get_todoset(project_id)
+        todoset_id = todoset['id']
+        data = {'name': name}
+        if description is not None:
+            data['description'] = description
+        endpoint = f'buckets/{project_id}/todosets/{todoset_id}/todolists.json'
+        response = self.post(endpoint, data)
+        if response.status_code == 201:
+            return response.json()
+        else:
+            raise Exception(f"Failed to create todolist: {response.status_code} - {response.text}")
+
+    def update_todolist(self, project_id, todolist_id, name, description=None):
+        """Update a todolist.
+
+        Args:
+            project_id: Project ID
+            todolist_id: Todolist ID
+            name: New todolist name (required by Basecamp API)
+            description: New HTML description (optional)
+
+        Returns:
+            dict: The updated todolist
+        """
+        data = {'name': name}
+        if description is not None:
+            data['description'] = description
+        endpoint = f'buckets/{project_id}/todolists/{todolist_id}.json'
+        response = self.put(endpoint, data)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to update todolist: {response.status_code} - {response.text}")
+
+    def trash_todolist(self, project_id, todolist_id):
+        """Trash a todolist.
+
+        Args:
+            project_id: Project ID
+            todolist_id: Todolist ID
+
+        Returns:
+            bool: True if successful
+        """
+        endpoint = f'buckets/{project_id}/recordings/{todolist_id}/status/trashed.json'
+        response = self.put(endpoint)
+        if response.status_code == 204:
+            return True
+        else:
+            raise Exception(f"Failed to trash todolist: {response.status_code} - {response.text}")
+
+    # To-do list groups
+    def get_todolist_groups(self, project_id, todolist_id, status=None):
+        """Get groups (sub-sections) within a todolist.
+
+        Args:
+            project_id: Project ID
+            todolist_id: Todolist ID
+            status: Optional filter: 'archived' or 'trashed'
+
+        Returns:
+            list: List of group objects
+        """
+        endpoint = f'buckets/{project_id}/todolists/{todolist_id}/groups.json'
+        params = {}
+        if status:
+            params['status'] = status
+        response = self.get(endpoint, params=params if params else None)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to get todolist groups: {response.status_code} - {response.text}")
+
+    def create_todolist_group(self, project_id, todolist_id, name, color=None):
+        """Create a group (sub-section) in a todolist.
+
+        Args:
+            project_id: Project ID
+            todolist_id: Todolist ID
+            name: Group name (required)
+            color: Optional color (white, red, orange, yellow, green, blue, aqua, purple, gray, pink, brown)
+
+        Returns:
+            dict: The created group
+        """
+        data = {'name': name}
+        if color is not None:
+            data['color'] = color
+        endpoint = f'buckets/{project_id}/todolists/{todolist_id}/groups.json'
+        response = self.post(endpoint, data)
+        if response.status_code == 201:
+            return response.json()
+        else:
+            raise Exception(f"Failed to create todolist group: {response.status_code} - {response.text}")
+
+    def reposition_todolist_group(self, project_id, group_id, position):
+        """Reposition a group within a todolist.
+
+        Args:
+            project_id: Project ID
+            group_id: Group ID
+            position: New 1-based position
+
+        Returns:
+            bool: True if successful
+        """
+        data = {'position': position}
+        endpoint = f'buckets/{project_id}/todolists/groups/{group_id}/position.json'
+        response = self.put(endpoint, data)
+        if response.status_code == 204:
+            return True
+        else:
+            raise Exception(f"Failed to reposition todolist group: {response.status_code} - {response.text}")
+
+    # To-do repositioning
+    def reposition_todo(self, project_id, todo_id, position, parent_id=None):
+        """Reposition a to-do within its list or move it to a different list.
+
+        Args:
+            project_id: Project ID
+            todo_id: Todo ID
+            position: New 1-based position
+            parent_id: Optional parent todolist ID to move the todo to a different list
+
+        Returns:
+            bool: True if successful
+        """
+        data = {'position': position}
+        if parent_id is not None:
+            data['parent_id'] = parent_id
+        endpoint = f'buckets/{project_id}/todos/{todo_id}/position.json'
+        response = self.put(endpoint, data)
+        if response.status_code == 204:
+            return True
+        else:
+            raise Exception(f"Failed to reposition todo: {response.status_code} - {response.text}")
+
     # To-do methods
     def get_todos(self, project_id, todolist_id):
         """Get all todos in a todolist, handling pagination.
@@ -342,6 +490,89 @@ class BasecampClient:
             return response.json()
         else:
             raise Exception(f"Failed to get people: {response.status_code} - {response.text}")
+
+    def get_person(self, person_id):
+        """Get a specific person by ID.
+
+        Args:
+            person_id: Person ID
+
+        Returns:
+            dict: Person object with profile details
+        """
+        response = self.get(f'people/{person_id}.json')
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to get person: {response.status_code} - {response.text}")
+
+    def get_my_profile(self):
+        """Get the current authenticated user's profile.
+
+        Returns:
+            dict: Person object for the current user
+        """
+        response = self.get('my/profile.json')
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to get profile: {response.status_code} - {response.text}")
+
+    def get_project_people(self, project_id):
+        """Get all people on a project.
+
+        Args:
+            project_id: Project ID
+
+        Returns:
+            list: List of person objects
+        """
+        response = self.get(f'projects/{project_id}/people.json')
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to get project people: {response.status_code} - {response.text}")
+
+    def update_project_access(self, project_id, grant=None, revoke=None, create=None):
+        """Manage project access (grant/revoke people).
+
+        Args:
+            project_id: Project ID
+            grant: List of person IDs to add to the project
+            revoke: List of person IDs to remove from the project
+            create: List of new people dicts (name, email_address, optional title/company_name)
+
+        Returns:
+            dict: Contains 'granted' and 'revoked' arrays
+        """
+        data = {}
+        if grant is not None:
+            data['grant'] = grant
+        if revoke is not None:
+            data['revoke'] = revoke
+        if create is not None:
+            data['create'] = create
+
+        if not data:
+            raise ValueError("At least one of grant, revoke, or create must be provided")
+
+        response = self.put(f'projects/{project_id}/people/users.json', data)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to update project access: {response.status_code} - {response.text}")
+
+    def get_pingable_people(self):
+        """Get all people who can be pinged on this account.
+
+        Returns:
+            list: List of person objects
+        """
+        response = self.get('circles/people.json')
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to get pingable people: {response.status_code} - {response.text}")
 
     # Campfire (chat) methods
     def get_campfires(self, project_id):
@@ -1433,3 +1664,39 @@ class BasecampClient:
             return response.json()
         else:
             raise Exception(f"Failed to get upcoming schedule: {response.status_code} - {response.text}")
+
+    # Native search
+    def search(self, query, type=None, bucket_id=None, creator_id=None,
+               file_type=None, exclude_chat=None, page=1, per_page=50):
+        """Search Basecamp using the native server-side search API.
+
+        Args:
+            query: Search query string (required)
+            type: Filter by recording type (e.g. 'Todo', 'Message', 'Document')
+            bucket_id: Filter by project ID
+            creator_id: Filter by person ID
+            file_type: Filter attachments by file type
+            exclude_chat: Set to 1 to exclude chat results
+            page: Page number (default: 1)
+            per_page: Results per page (default: 50)
+
+        Returns:
+            list: List of matching recording objects
+        """
+        params = {'q': query, 'page': page, 'per_page': per_page}
+        if type is not None:
+            params['type'] = type
+        if bucket_id is not None:
+            params['bucket_id'] = bucket_id
+        if creator_id is not None:
+            params['creator_id'] = creator_id
+        if file_type is not None:
+            params['file_type'] = file_type
+        if exclude_chat is not None:
+            params['exclude_chat'] = exclude_chat
+        endpoint = 'search.json'
+        response = self.get(endpoint, params=params)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to search: {response.status_code} - {response.text}")

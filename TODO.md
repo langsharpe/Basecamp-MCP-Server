@@ -31,25 +31,35 @@ Added `create_message(project_id, message_board_id, subject, content, category_i
 
 Added `get_campfire_line(project_id, campfire_id, line_id)`, `create_campfire_line(project_id, campfire_id, content)`, and `delete_campfire_line(project_id, campfire_id, line_id)` to both `basecamp_client.py` and `basecamp_fastmcp.py`. Tests in `tests/test_campfire.py`.
 
-#### 3. **People Management**
-- `GET /people/{id}.json` -- **Get a specific person**
-- `GET /projects/{id}/people.json` -- **Get project members**
-- `PUT /projects/{id}/people/users.json` -- **Manage project access** (grant/revoke)
-- `GET /circles/people.json` -- Get pingable people
-- `GET /my/profile.json` -- **Get current user profile
+#### ~~3. **People Management**~~ DONE
+- `GET /people/{id}.json` -- **Get a specific person** ✅
+- `GET /projects/{id}/people.json` -- **Get project members** ✅
+- `PUT /projects/{id}/people/users.json` -- **Manage project access** (grant/revoke) ✅
+- `GET /circles/people.json` -- Get pingable people ✅
+- `GET /my/profile.json` -- **Get current user profile** ✅
 
-#### 5. **Native Basecamp Search**
-- `GET /search.json?q=...` -- **Server-side search** (currently using custom client-side search)
+Added `get_person`, `get_my_profile`, `get_project_people`, `update_project_access`, and `get_pingable_people` to both `basecamp_client.py` and `basecamp_fastmcp.py`. Tests in `tests/test_people.py`.
 
-#### 9. **To-do Lists CRUD** (currently only listing)
-- `POST /buckets/{id}/todosets/{id}/todolists.json` -- **Create a todolist**
-- `PUT /buckets/{id}/todolists/{id}.json` -- **Update a todolist**
-- Trash a todolist (via recording status)
+#### ~~5. **Native Basecamp Search**~~ DONE
+- `GET /search.json?q=...` -- **Server-side search** ✅
 
-#### 10. **To-do List Groups** (sub-sections within todolists)
-- `GET /buckets/{id}/todolists/{id}/groups.json` -- List groups
-- `POST` -- Create a group
-- `PUT .../position.json` -- Reposition a group
+Added `search(query, type, bucket_id, creator_id, file_type, exclude_chat, page, per_page)` to `basecamp_client.py` and `native_search(...)` MCP tool to `basecamp_fastmcp.py`. Supports filtering by type, project, creator, file type, and pagination. Tests in `tests/test_search.py`.
 
-#### 11. **To-do Repositioning**
-- `PUT /buckets/{id}/todos/{id}/position.json` -- **Reposition a to-do** (move between lists too)
+#### ~~9. **To-do Lists CRUD**~~ DONE
+- `POST /buckets/{id}/todosets/{id}/todolists.json` -- **Create a todolist** ✅
+- `PUT /buckets/{id}/todolists/{id}.json` -- **Update a todolist** ✅
+- Trash a todolist (via recording status) ✅
+
+Added `create_todolist`, `update_todolist`, `trash_todolist` to both `basecamp_client.py` and `basecamp_fastmcp.py`. Tests in `tests/test_todolists.py`.
+
+#### ~~10. **To-do List Groups**~~ DONE
+- `GET /buckets/{id}/todolists/{id}/groups.json` -- List groups ✅
+- `POST /buckets/{id}/todolists/{id}/groups.json` -- Create a group ✅
+- `PUT /buckets/{id}/todolists/groups/{id}/position.json` -- Reposition a group ✅
+
+Added `get_todolist_groups`, `create_todolist_group`, `reposition_todolist_group` to both `basecamp_client.py` and `basecamp_fastmcp.py`. Also added `todolist_group` compact field mapping. Tests in `tests/test_todolists.py`.
+
+#### ~~11. **To-do Repositioning**~~ DONE
+- `PUT /buckets/{id}/todos/{id}/position.json` -- **Reposition a to-do** (move between lists too) ✅
+
+Added `reposition_todo(project_id, todo_id, position, parent_id)` to both `basecamp_client.py` and `basecamp_fastmcp.py`. Supports both repositioning within a list and moving to a different list via `parent_id`. Tests in `tests/test_todolists.py`.
