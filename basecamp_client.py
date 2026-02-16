@@ -446,6 +446,66 @@ class BasecampClient:
         else:
             raise Exception(f"Failed to get message: {response.status_code} - {response.text}")
 
+    def create_message(self, project_id, message_board_id, subject, content=None, status="active", category_id=None):
+        """Create a new message on a message board.
+
+        Args:
+            project_id: Project/bucket ID
+            message_board_id: Message board ID
+            subject: Message subject/title (required)
+            content: HTML content of the message
+            status: Message status, set to "active" to publish immediately
+            category_id: Optional message category/type ID
+
+        Returns:
+            dict: The created message
+        """
+        endpoint = f'buckets/{project_id}/message_boards/{message_board_id}/messages.json'
+        data = {'subject': subject, 'status': status}
+
+        if content is not None:
+            data['content'] = content
+        if category_id is not None:
+            data['category_id'] = category_id
+
+        response = self.post(endpoint, data)
+        if response.status_code == 201:
+            return response.json()
+        else:
+            raise Exception(f"Failed to create message: {response.status_code} - {response.text}")
+
+    def update_message(self, project_id, message_id, subject=None, content=None, category_id=None):
+        """Update an existing message.
+
+        Args:
+            project_id: Project/bucket ID
+            message_id: Message ID
+            subject: New subject/title
+            content: New HTML content
+            category_id: New message category/type ID
+
+        Returns:
+            dict: The updated message
+        """
+        endpoint = f'buckets/{project_id}/messages/{message_id}.json'
+        data = {}
+
+        if subject is not None:
+            data['subject'] = subject
+        if content is not None:
+            data['content'] = content
+        if category_id is not None:
+            data['category_id'] = category_id
+
+        if not data:
+            raise ValueError("No fields provided to update")
+
+        response = self.put(endpoint, data)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to update message: {response.status_code} - {response.text}")
+
     # Inbox methods (Email Forwards)
     def get_inbox(self, project_id):
         """Get the inbox for a project (email forwards container).

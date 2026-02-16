@@ -755,6 +755,96 @@ async def get_message(project_id: str, message_id: str) -> Dict[str, Any]:
         }
 
 
+@mcp.tool()
+async def create_message(project_id: str, message_board_id: str, subject: str,
+                         content: Optional[str] = None, category_id: Optional[str] = None) -> Dict[str, Any]:
+    """Create a new message on a project's message board.
+
+    Args:
+        project_id: The project ID
+        message_board_id: The message board ID
+        subject: The message subject/title (required)
+        content: HTML content of the message
+        category_id: Optional message category/type ID
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        message = await _run_sync(
+            lambda: client.create_message(
+                project_id, message_board_id, subject,
+                content=content,
+                category_id=category_id
+            )
+        )
+        return {
+            "status": "success",
+            "message": message,
+            "summary": f"Message '{subject}' created successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error creating message: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def update_message(project_id: str, message_id: str, subject: Optional[str] = None,
+                         content: Optional[str] = None, category_id: Optional[str] = None) -> Dict[str, Any]:
+    """Update an existing message.
+
+    Args:
+        project_id: The project ID
+        message_id: The message ID
+        subject: New subject/title
+        content: New HTML content
+        category_id: New message category/type ID
+    """
+    client = _get_basecamp_client()
+    if not client:
+        return _get_auth_error_response()
+
+    try:
+        if all(v is None for v in [subject, content, category_id]):
+            return {
+                "error": "Invalid input",
+                "message": "At least one field to update must be provided"
+            }
+        message = await _run_sync(
+            lambda: client.update_message(
+                project_id, message_id,
+                subject=subject,
+                content=content,
+                category_id=category_id
+            )
+        )
+        return {
+            "status": "success",
+            "message": message,
+            "summary": "Message updated successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error updating message: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
 # Inbox Tools (Email Forwards)
 @mcp.tool()
 async def get_inbox(project_id: str) -> Dict[str, Any]:

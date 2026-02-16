@@ -18,9 +18,11 @@ Also added compact field mappings for `person`, `campfire`, and `schedule_entry`
 
 High Priority: Commonly Needed Features
 
-#### 1. **Messages -- Create & Update** (currently read-only)
-- `POST /buckets/{id}/message_boards/{id}/messages.json` -- **Create a message**
-- `PUT /buckets/{id}/messages/{id}.json` -- **Update a message**
+#### ~~1. **Messages -- Create & Update**~~ DONE
+- `POST /buckets/{id}/message_boards/{id}/messages.json` -- **Create a message** ✅
+- `PUT /buckets/{id}/messages/{id}.json` -- **Update a message** ✅
+
+Added `create_message(project_id, message_board_id, subject, content, category_id)` and `update_message(project_id, message_id, subject, content, category_id)` to both `basecamp_client.py` and `basecamp_fastmcp.py`. Tests in `tests/test_messages.py`.
 
 #### 2. **Campfire -- Send & Delete Lines** (currently read-only)
 - `POST /buckets/{id}/chats/{id}/lines.json` -- **Send a campfire message**
