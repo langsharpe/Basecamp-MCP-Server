@@ -34,6 +34,9 @@ COMPACT_FIELDS = {
     "recording":     ["id", "title", "type", "created_at", "app_url"],
     "webhook":       ["id", "payload_url", "active"],
     "card_table":    ["id", "title"],
+    "person":        ["id", "name", "email_address", "admin", "avatar_url"],
+    "campfire":      ["id", "title", "app_url"],
+    "schedule_entry": ["id", "title", "starts_at", "ends_at", "all_day", "app_url"],
 }
 
 # Resource types that should include assignee names
