@@ -360,6 +360,61 @@ class BasecampClient:
         else:
             raise Exception(f"Failed to get campfire lines: {response.status_code} - {response.text}")
 
+    def get_campfire_line(self, project_id, campfire_id, line_id):
+        """Get a specific campfire line.
+
+        Args:
+            project_id: Project/bucket ID
+            campfire_id: Campfire/chat ID
+            line_id: Line ID
+
+        Returns:
+            dict: The campfire line
+        """
+        endpoint = f'buckets/{project_id}/chats/{campfire_id}/lines/{line_id}.json'
+        response = self.get(endpoint)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to get campfire line: {response.status_code} - {response.text}")
+
+    def create_campfire_line(self, project_id, campfire_id, content):
+        """Send a message to a campfire.
+
+        Args:
+            project_id: Project/bucket ID
+            campfire_id: Campfire/chat ID
+            content: The message content (plain text or HTML)
+
+        Returns:
+            dict: The created campfire line
+        """
+        endpoint = f'buckets/{project_id}/chats/{campfire_id}/lines.json'
+        data = {"content": content}
+        response = self.post(endpoint, data)
+        if response.status_code == 201:
+            return response.json()
+        else:
+            raise Exception(f"Failed to create campfire line: {response.status_code} - {response.text}")
+
+    def delete_campfire_line(self, project_id, campfire_id, line_id):
+        """Delete a campfire line.
+
+        Args:
+            project_id: Project/bucket ID
+            campfire_id: Campfire/chat ID
+            line_id: Line ID
+
+        Returns:
+            bool: True if successful
+        """
+        endpoint = f'buckets/{project_id}/chats/{campfire_id}/lines/{line_id}.json'
+        response = self.delete(endpoint)
+        if response.status_code == 204:
+            return True
+        else:
+            raise Exception(f"Failed to delete campfire line: {response.status_code} - {response.text}")
+
     # Message board methods
     def get_message_board(self, project_id):
         """Get the message board for a project.

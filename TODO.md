@@ -24,10 +24,12 @@ High Priority: Commonly Needed Features
 
 Added `create_message(project_id, message_board_id, subject, content, category_id)` and `update_message(project_id, message_id, subject, content, category_id)` to both `basecamp_client.py` and `basecamp_fastmcp.py`. Tests in `tests/test_messages.py`.
 
-#### 2. **Campfire -- Send & Delete Lines** (currently read-only)
-- `POST /buckets/{id}/chats/{id}/lines.json` -- **Send a campfire message**
-- `GET /buckets/{id}/chats/{id}/lines/{id}.json` -- Get a specific line
-- `DELETE /buckets/{id}/chats/{id}/lines/{id}.json` -- Delete a line
+#### ~~2. **Campfire -- Send & Delete Lines**~~ DONE
+- `POST /buckets/{id}/chats/{id}/lines.json` -- **Send a campfire message** ✅
+- `GET /buckets/{id}/chats/{id}/lines/{id}.json` -- Get a specific line ✅
+- `DELETE /buckets/{id}/chats/{id}/lines/{id}.json` -- Delete a line ✅
+
+Added `get_campfire_line(project_id, campfire_id, line_id)`, `create_campfire_line(project_id, campfire_id, content)`, and `delete_campfire_line(project_id, campfire_id, line_id)` to both `basecamp_client.py` and `basecamp_fastmcp.py`. Tests in `tests/test_campfire.py`.
 
 #### 3. **People Management**
 - `GET /people/{id}.json` -- **Get a specific person**
