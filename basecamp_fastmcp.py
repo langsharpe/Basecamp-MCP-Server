@@ -851,7 +851,8 @@ async def get_message(project_id: str, message_id: str) -> Dict[str, Any]:
 
 @mcp.tool()
 async def create_message(project_id: str, message_board_id: str, subject: str,
-                         content: Optional[str] = None, category_id: Optional[str] = None) -> Dict[str, Any]:
+                         content: Optional[str] = None, status: Optional[str] = None,
+                         category_id: Optional[str] = None) -> Dict[str, Any]:
     """Create a new message on a project's message board.
 
     Args:
@@ -859,6 +860,7 @@ async def create_message(project_id: str, message_board_id: str, subject: str,
         message_board_id: The message board ID
         subject: The message subject/title (required)
         content: HTML content of the message
+        status: Message status - "active" to publish immediately (default), or "draft" to save as draft
         category_id: Optional message category/type ID
     """
     client = _get_basecamp_client()
@@ -870,6 +872,7 @@ async def create_message(project_id: str, message_board_id: str, subject: str,
             lambda: client.create_message(
                 project_id, message_board_id, subject,
                 content=content,
+                status=status or "active",
                 category_id=category_id
             )
         )
