@@ -860,7 +860,7 @@ async def create_message(project_id: str, message_board_id: str, subject: str,
         message_board_id: The message board ID
         subject: The message subject/title (required)
         content: HTML content of the message
-        status: Message status - "active" to publish immediately (default), or "draft" to save as draft
+        status: Message status - "active" to publish immediately (default), or "drafted" to save as draft
         category_id: Optional message category/type ID
     """
     client = _get_basecamp_client()
